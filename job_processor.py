@@ -81,7 +81,7 @@ class JobProcessor:
     self.bots.clear()
 
 if __name__ == "__main__":
-  processor = JobProcessor()
+  processor = JobProcessor(2)
   jobs = [
     "Hello, world!",
     "This is a test.",
