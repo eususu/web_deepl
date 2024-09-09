@@ -1,6 +1,7 @@
 import selenium
 import selenium.webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 import time
 import traceback
 
@@ -10,9 +11,13 @@ from selenium.webdriver.support import expected_conditions as EC
 
 
 class DeepLBot:
+  name:str
   driver: selenium.webdriver.Chrome
+  count:int
 
-  def __init__(self):
+  def __init__(self, name:str):
+    self.name = name
+    self.count = 0
     self.__new_session()
 
   def __new_session(self):
@@ -45,15 +50,14 @@ class DeepLBot:
     input_area = self.driver.find_element(By.NAME, 'source')
 
     try:
+      input_area.send_keys(Keys.CONTROL, 'a')
       input_area.send_keys(text)
     except Exception as e:
       print(e)
       print("입력 영역을 찾을 수 없습니다.")
       input_area.send_keys(text)
 
-
     print('=========================')
-    
 
     time.sleep(1)
     target_area = self.driver.find_element(By.NAME, 'target')

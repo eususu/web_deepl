@@ -1,6 +1,9 @@
 import threading
 import time
+import queue
 from queue import Queue
+from typing import List, Union
+from tqdm import tqdm
 
 from deepl_bot import DeepLBot
 
@@ -28,35 +31,36 @@ class Job:
 
 class JobProcessor:
   def __init__(self, thread_count:int=5):
-    self.bots = [DeepLBot() for _ in range(thread_count)]
+    self.bots:List[DeepLBot] = [DeepLBot(str(i)) for i in tqdm(range(thread_count), desc="Create DeepL Bot")]
+    print(self.bots)
     self.threads = []
-    self.job_queue = []
+    self.job_queue = Queue()  # Queue로 변경
     self.completed_jobs = Queue()
     self.lock = threading.Lock()
     self.is_running = True
 
   def process(self, job: Job):
-    with self.lock:
-      self.job_queue.append(job)
-    
+    self.job_queue.put(job)  # Queue에 작업 추가
     if not self.threads:
       self._start_worker_threads()
-    
     return job
 
   def _start_worker_threads(self):
-    for i in range(len(self.bots)):
+    for i in tqdm(range(len(self.bots)), desc="Create DeepL Job Thread"):
       thread = threading.Thread(target=self._worker, args=(i,))
       thread.start()
       self.threads.append(thread)
 
+    print(f'# {len(self.bots)} threads are ready.')
+
   def _worker(self, bot_index):
-    bot = self.bots[bot_index]
+    bot:DeepLBot = self.bots[bot_index]
     while self.is_running:
-      job = None
-      with self.lock:
-        if self.job_queue:
-          job = self.job_queue.pop(0)
+      job:Job = None
+      try:
+          job = self.job_queue.get(timeout=0.1)  # Queue에서 작업 가져오기
+      except queue.Empty:
+          continue
       
       if job:
         job.set_thread_id(threading.get_ident())
@@ -64,10 +68,11 @@ class JobProcessor:
         translated_text = bot.translate(original_text, "ko")
         job.set_translated_text(translated_text)
         self.completed_jobs.put(job)
+        self.job_queue.task_done()  # 작업 완료 표시
       else:
         time.sleep(0.1)
 
-  def get_completed_job(self):
+  def get_completed_job(self)->Union[Job, None]:
     return self.completed_jobs.get() if not self.completed_jobs.empty() else None
 
   def wait(self):
@@ -81,7 +86,7 @@ class JobProcessor:
     self.bots.clear()
 
 if __name__ == "__main__":
-  processor = JobProcessor(2)
+  processor = JobProcessor(5)
   jobs = [
     "Hello, world!",
     "This is a test.",
@@ -90,7 +95,15 @@ if __name__ == "__main__":
     "I am a programmer.",
     "Coding is fun.",
     "Artificial Intelligence is an interesting field.",
-    "Software development is a creative work."
+    "Software development is a creative work.",
+    "Hello, world!",
+    "This is a test.",
+    "I love programming.",
+    "Python is a great language.",
+    "I am a programmer.",
+    "Coding is fun.",
+    "Artificial Intelligence is an interesting field.",
+    "Software development is a creative work.",
   ]
 
   for text in jobs:
