@@ -1,52 +1,107 @@
+import asyncio
+from contextlib import asynccontextmanager
+import logging
+import queue
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional
-import requests
 import os
+import sys
+
+app = FastAPI()
+MAX_JOB=5
+
+logging.basicConfig(
+    stream=sys.stdout, 
+    level=logging.INFO, 
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'  # 로그 포맷 추가
+)
+
+#@asynccontextmanager
+#async def lifespan(app):
+#    async with app:
+#        logging.info("starting~")
+
+import asyncio
+import threading
+from queue import Queue
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
-DEEPL_API_KEY = os.getenv("DEEPL_API_KEY")
-DEEPL_API_URL = "https://api-free.deepl.com/v2/translate"
+class JobQueue:
+    def __init__(self, num_workers):
+        self.queue = Queue(maxsize=num_workers)
+        self.num_workers = num_workers
+        self.workers = []
 
-class Translation(BaseModel):
-    detected_source_language: str
-    text: str
+    def check(self)->bool:
+        if self.queue.full():
+            raise queue.Full
 
-class TranslationResponse(BaseModel):
-    translations: List[Translation]
+    def start(self):
+        for _ in range(self.num_workers):
+            worker = threading.Thread(target=self.worker, daemon=True)
+            worker.start()
+            self.workers.append(worker)
 
-@app.post("/v2/translate", response_model=TranslationResponse)
-async def translate(
-    text: List[str] = Query(..., description="텍스트 목록"),
-    target_lang: str = Query(..., description="대상 언어"),
-    source_lang: Optional[str] = Query(None, description="원본 언어 (선택사항)"),
-    split_sentences: Optional[str] = Query("1", description="문장 분할 옵션"),
-    preserve_formatting: Optional[bool] = Query(False, description="형식 유지"),
-    formality: Optional[str] = Query(None, description="형식성 (선택사항)")
-):
-    headers = {
-        "Authorization": f"DeepL-Auth-Key {DEEPL_API_KEY}"
-    }
-    
-    payload = {
-        "text": text,
-        "target_lang": target_lang,
-        "source_lang": source_lang,
-        "split_sentences": split_sentences,
-        "preserve_formatting": preserve_formatting,
-        "formality": formality
-    }
-    
+    def worker(self):
+        while True:
+            job, future = self.queue.get()
+            try:
+                result = asyncio.run(job())
+                logging.info(result)
+                future.set_result(result)
+            except Exception as e:
+                future.set_exception(e)
+            finally:
+                self.queue.task_done()
+
+    async def add_job(self, job):
+        future = asyncio.Future()
+        self.queue.put((job, future))
+        return await future
+
+job_queue = JobQueue(num_workers=5)
+
+@app.on_event("startup")
+def startup_event():
+    job_queue.start()
+
+@app.middleware("http")
+async def queue_middleware(request, call_next):
+    async def job():
+        logging.info("running job")
+        await asyncio.sleep(5)
+        return JSONResponse(content={"message": "Job completed successfully"})
+
     try:
-        response = requests.post(DEEPL_API_URL, headers=headers, data=payload)
-        response.raise_for_status()
-        result = response.json()
-        return JSONResponse(content=result)
-    except requests.RequestException as e:
-        raise HTTPException(status_code=500, detail=f"DeepL API 오류: {str(e)}")
+        job_queue.check()
+        response = await job_queue.add_job(job)
+        return response
+    except asyncio.TimeoutError:
+        return JSONResponse(
+            status_code=503,
+            content={"message": "서버가繁합니다. 나중에 다시 시도해주세요."}
+        )
+    except queue.Full:
+        return JSONResponse(
+            status_code=503,
+            content={"message": "큐가 가득 차 있습니다. 나중에 다시 시도해주세요."}
+        )
+@app.get("/")
+async def root():
+    await asyncio.sleep(1)  # 작업 시뮬레이션
+    return {"message": "Hello World"}
+
+@app.get("/long")
+async def long_task():
+    await asyncio.sleep(5)  # 긴 작업 시뮬레이션
+    return {"message": "Long task completed"}
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
