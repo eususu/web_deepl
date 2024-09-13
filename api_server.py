@@ -9,13 +9,15 @@ from typing import List, Optional
 import os
 import sys
 
+from deepl_bot import DeepLBot
+
 app = FastAPI()
-MAX_JOB=3
+MAX_JOB=2
 
 logging.basicConfig(
     stream=sys.stdout, 
     level=logging.INFO, 
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'  # 로그 포맷 추가
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
 #@asynccontextmanager
@@ -32,10 +34,12 @@ from fastapi.responses import JSONResponse
 app = FastAPI()
 
 class JobQueue:
+    closing:bool=False
     def __init__(self, num_workers):
         self.queue:Queue = Queue(maxsize=num_workers)
         self.num_workers = num_workers
         self.workers = []
+        self.bots:List[DeepLBot] = []
 
     def check(self)->bool:
         logging.info(f"check {self.queue.qsize()}/{self.queue.maxsize}")
@@ -44,17 +48,30 @@ class JobQueue:
             raise queue.Full
 
     def start(self):
-        for _ in range(self.num_workers):
-            worker = threading.Thread(target=self.worker, daemon=True)
+        for index in range(self.num_workers):
+            worker = threading.Thread(target=self.worker, name=f'job_{index}', daemon=True)
             worker.start()
             self.workers.append(worker)
 
     def worker(self):
+        bot:DeepLBot = DeepLBot(name=threading.current_thread().name)
+        self.bots.append(bot)
         while True:
-            job, future = self.queue.get()
+            job=None
+            future=None
+            try:
+                job, future = self.queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            finally:
+                if self.closing: break
+
             try:
                 result = asyncio.run(job())
-                logging.info(str(result))
+                logging.info('go translate')
+                translated = bot.translate(result, "ko")
+                logging.info(f'translated={str(translated)}')
+                result = JSONResponse(content={"message": f"Job completed {translated} successfully"})
                 future.set_result(result)
             except Exception as e:
                 future.set_exception(e)
@@ -66,6 +83,16 @@ class JobQueue:
         self.queue.put((job, future))
         return await future
 
+    def stop(self):
+        logging.info("closing bots")
+        for bot in self.bots:
+            bot.close()
+
+        logging.info("closing workers")
+        self.closing = True
+        for worker in self.workers:
+            worker.join()  # 스레드가 종료될 때까지 대기
+
 job_queue = JobQueue(num_workers=MAX_JOB)
 
 @app.on_event("startup")
@@ -76,8 +103,8 @@ def startup_event():
 async def queue_middleware(request, call_next):
     async def job(param):  # 파라미터 추가
         logging.info(f"running job with param: {param}")
-        await asyncio.sleep(5)
-        return JSONResponse(content={"message": f"Job completed {param} successfully"})
+        return param
+        #return JSONResponse(content={"message": f"Job completed {param} successfully"})
 
     param = request.query_params.get("param", "default")  # 쿼리 파라미터에서 값 가져오기
 
@@ -106,6 +133,10 @@ async def root():
 async def long_task():
     await asyncio.sleep(5)  # 긴 작업 시뮬레이션
     return {"message": "Long task completed"}
+
+@app.on_event("shutdown")
+def shutdown_event():
+    job_queue.stop()  # 서버 종료 시 스레드 안전하게 종료
 
 if __name__ == "__main__":
     import uvicorn

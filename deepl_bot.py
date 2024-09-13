@@ -70,7 +70,7 @@ class DeepLBot:
     while True:
       translated_text = target_area.get_attribute("textContent")
       translated_len = len(translated_text)
-      if translated_len > 2:
+      if translated_len >= 2:
         return translated_text
       time.sleep(0.2)
 
