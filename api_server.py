@@ -10,7 +10,7 @@ import os
 import sys
 
 app = FastAPI()
-MAX_JOB=5
+MAX_JOB=3
 
 logging.basicConfig(
     stream=sys.stdout, 
@@ -33,12 +33,14 @@ app = FastAPI()
 
 class JobQueue:
     def __init__(self, num_workers):
-        self.queue = Queue(maxsize=num_workers)
+        self.queue:Queue = Queue(maxsize=num_workers)
         self.num_workers = num_workers
         self.workers = []
 
     def check(self)->bool:
+        logging.info(f"check {self.queue.qsize()}/{self.queue.maxsize}")
         if self.queue.full():
+            logging.info("check full")
             raise queue.Full
 
     def start(self):
@@ -52,7 +54,7 @@ class JobQueue:
             job, future = self.queue.get()
             try:
                 result = asyncio.run(job())
-                logging.info(result)
+                logging.info(str(result))
                 future.set_result(result)
             except Exception as e:
                 future.set_exception(e)
@@ -64,7 +66,7 @@ class JobQueue:
         self.queue.put((job, future))
         return await future
 
-job_queue = JobQueue(num_workers=5)
+job_queue = JobQueue(num_workers=MAX_JOB)
 
 @app.on_event("startup")
 def startup_event():
@@ -72,24 +74,28 @@ def startup_event():
 
 @app.middleware("http")
 async def queue_middleware(request, call_next):
-    async def job():
-        logging.info("running job")
+    async def job(param):  # 파라미터 추가
+        logging.info(f"running job with param: {param}")
         await asyncio.sleep(5)
-        return JSONResponse(content={"message": "Job completed successfully"})
+        return JSONResponse(content={"message": f"Job completed {param} successfully"})
+
+    param = request.query_params.get("param", "default")  # 쿼리 파라미터에서 값 가져오기
 
     try:
         job_queue.check()
-        response = await job_queue.add_job(job)
+        response = await job_queue.add_job(lambda: job(param))  # 파라미터 전달
         return response
     except asyncio.TimeoutError:
+        logging.error("timeout")
         return JSONResponse(
             status_code=503,
             content={"message": "서버가繁합니다. 나중에 다시 시도해주세요."}
         )
     except queue.Full:
+        logging.error("queue is full")
         return JSONResponse(
             status_code=503,
-            content={"message": "큐가 가득 차 있습니다. 나중에 다시 시도해주세요."}
+            content={"message": f"{param} 큐가 가득 차 있습니다. 나중에 다시 시도해주세요."}
         )
 @app.get("/")
 async def root():
