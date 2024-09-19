@@ -1,3 +1,4 @@
+import logging
 import selenium
 import selenium.webdriver
 from selenium.webdriver.common.by import By
@@ -40,7 +41,7 @@ class DeepLBot:
       self.__new_session()
       return self.__translate(text, target_lang, source_lang)
     except Exception as e:
-      print(f"번역 중 오류 발생: {e}")
+      logging.error(f"번역 중 오류 발생", e)
       print("스택 트레이스:")
       traceback.print_exc()
 
@@ -53,11 +54,9 @@ class DeepLBot:
       input_area.send_keys(Keys.CONTROL, 'a')
       input_area.send_keys(text)
     except Exception as e:
-      print(e)
-      print("입력 영역을 찾을 수 없습니다.")
+      logging.error("failed to select all", e)
+      logging.error("입력 영역을 찾을 수 없습니다.")
       input_area.send_keys(text)
-
-    print('=========================')
 
     time.sleep(1)
     target_area = self.driver.find_element(By.NAME, 'target')
@@ -104,7 +103,7 @@ if __name__ == "__main__":
         result = bot.translate(text, "ko")
         results.append(result)
     except Exception as e:
-      print(f"번역 중 오류 발생: {e}")
+      logging.error(f"번역 중 오류 발생", e)
     finally:
       bot.close()
     return results

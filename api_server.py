@@ -5,11 +5,12 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 import sys
 
+from _types import TranslateRequest, TranslationResponse
 from deepl_bot import DeepLBot
 from job_queue import JobQueue
 
 app = FastAPI()
-MAX_JOB=4
+MAX_JOB=2
 
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.basicConfig(
@@ -27,19 +28,17 @@ job_queue:JobQueue = JobQueue(num_workers=MAX_JOB)
 def startup_event():
     job_queue.start()
 
-@app.middleware("http")
-async def queue_middleware(request, call_next):
-    async def job(param):  # 파라미터 추가
-        logging.info(f"running job with param: {param}")
-        return param
+@app.post("/v2/translate")
+async def v2_translate(request:TranslateRequest)->TranslationResponse:
+    async def job(request:TranslateRequest):  # 파라미터 추가
+        logging.info(f"running job with param: {request}")
+        return request
         #return JSONResponse(content={"message": f"Job completed {param} successfully"})
-
-    param = request.query_params.get("param", "default")  # 쿼리 파라미터에서 값 가져오기
 
     try:
         job_queue.check()
         logging.info("add job")
-        response = await job_queue.add_job(lambda: job(param))  # 파라미터 전달
+        response:TranslationResponse = await job_queue.add_job(lambda: job(request))  # 파라미터 전달
         return response
     except asyncio.TimeoutError:
         logging.error("timeout")
@@ -51,7 +50,7 @@ async def queue_middleware(request, call_next):
         logging.error("queue is full")
         return JSONResponse(
             status_code=503,
-            content={"message": f"{param} 큐가 가득 차 있습니다. 나중에 다시 시도해주세요."}
+            content={"message": f"{request} 큐가 가득 차 있습니다. 나중에 다시 시도해주세요."}
         )
 @app.get("/")
 async def root():

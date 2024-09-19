@@ -6,6 +6,7 @@ import threading
 from typing import List
 
 from fastapi.responses import JSONResponse
+from _types import TranslateRequest, TranslationResponse, Translations
 from deepl_bot import DeepLBot
 
 class JobQueue(object):
@@ -43,12 +44,20 @@ class JobQueue(object):
         if self.closing: break
 
       try:
-        result = asyncio.run(job())
+        result:TranslateRequest = asyncio.run(job())
         logging.info('go translate')
-        translated = bot.translate(result, "ko")
+        translated = bot.translate(result.text, "ko")
         logging.info(f'translated={str(translated)}')
-        result = JSONResponse(content={"message": f"Job completed {translated} successfully"})
-        future.set_result(result)
+
+        response = TranslationResponse(
+          translations=[
+          Translations(
+          detected_source_language="EN",
+          text=translated,
+          billed_characters=0)
+          ]
+        )
+        future.set_result(response)
       except Exception as e:
         future.set_exception(e)
       finally:
