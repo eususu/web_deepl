@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 import logging
 import queue
 from fastapi import FastAPI, HTTPException, Query
@@ -12,21 +13,24 @@ from job_queue import JobQueue
 app = FastAPI()
 MAX_JOB=2
 
-logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.basicConfig(
     stream=sys.stdout, 
     level=logging.INFO, 
     format='%(asctime)s:%(name)s:%(levelname)s:PID(%(process)d):TID(%(thread)d):%(funcName)s - %(message)s'
 )
 
-app = FastAPI()
-
-
 job_queue:JobQueue = JobQueue(num_workers=MAX_JOB)
 
-@app.on_event("startup")
-def startup_event():
+@asynccontextmanager
+async def lifespan(app:FastAPI):
+    logging.info("starting up server...")
     job_queue.start()
+    yield
+    logging.info("shutting down server...")
+    job_queue.stop()  # 서버 종료 시 스레드 안전하게 종료
+
+    
+app = FastAPI(lifespan=lifespan)
 
 @app.post("/v2/translate")
 async def v2_translate(request:TranslationRequest)->TranslationResponse:
@@ -62,9 +66,6 @@ async def long_task():
     await asyncio.sleep(5)  # 긴 작업 시뮬레이션
     return {"message": "Long task completed"}
 
-@app.on_event("shutdown")
-def shutdown_event():
-    job_queue.stop()  # 서버 종료 시 스레드 안전하게 종료
 
 if __name__ == "__main__":
     import uvicorn

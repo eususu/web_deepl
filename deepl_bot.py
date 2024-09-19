@@ -10,6 +10,7 @@ import selenium.webdriver.support
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 class DeepLBot:
   name:str
