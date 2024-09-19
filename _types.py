@@ -2,7 +2,7 @@ from typing import List
 from pydantic import BaseModel
 
 
-class TranslateRequest(BaseModel):
+class TranslationRequest(BaseModel):
     auth_key:str
     text:str
     target_lang:str

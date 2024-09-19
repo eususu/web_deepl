@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 import sys
 
-from _types import TranslateRequest, TranslationResponse
+from _types import TranslationRequest, TranslationResponse
 from deepl_bot import DeepLBot
 from job_queue import JobQueue
 
@@ -29,8 +29,8 @@ def startup_event():
     job_queue.start()
 
 @app.post("/v2/translate")
-async def v2_translate(request:TranslateRequest)->TranslationResponse:
-    async def job(request:TranslateRequest):  # 파라미터 추가
+async def v2_translate(request:TranslationRequest)->TranslationResponse:
+    async def job(request:TranslationRequest):  # 파라미터 추가
         logging.info(f"running job with param: {request}")
         return request
         #return JSONResponse(content={"message": f"Job completed {param} successfully"})
