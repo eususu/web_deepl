@@ -9,19 +9,19 @@ from deepl_bot import DeepLBot
 from job_queue import JobQueue
 
 app = FastAPI()
-MAX_JOB=2
+MAX_JOB=4
 
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.basicConfig(
     stream=sys.stdout, 
     level=logging.INFO, 
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(funcName)s - %(process)d'
+    format='%(asctime)s:%(name)s:%(levelname)s:PID(%(process)d):TID(%(thread)d):%(funcName)s - %(message)s'
 )
 
 app = FastAPI()
 
 
-job_queue = JobQueue(num_workers=MAX_JOB)
+job_queue:JobQueue = JobQueue(num_workers=MAX_JOB)
 
 @app.on_event("startup")
 def startup_event():
@@ -38,6 +38,7 @@ async def queue_middleware(request, call_next):
 
     try:
         job_queue.check()
+        logging.info("add job")
         response = await job_queue.add_job(lambda: job(param))  # 파라미터 전달
         return response
     except asyncio.TimeoutError:

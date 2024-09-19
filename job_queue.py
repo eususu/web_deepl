@@ -8,7 +8,7 @@ from typing import List
 from fastapi.responses import JSONResponse
 from deepl_bot import DeepLBot
 
-class JobQueue:
+class JobQueue(object):
   closing:bool=False
   def __init__(self, num_workers):
     self.queue:Queue = Queue(maxsize=num_workers)
@@ -36,7 +36,6 @@ class JobQueue:
       job=None
       future=None
       try:
-        logging.info(self.queue)
         job, future = self.queue.get()
       except queue.Empty:
         continue
@@ -58,7 +57,7 @@ class JobQueue:
   async def add_job(self, job):
     future = asyncio.Future()
     print(self.queue)
-    await self.queue.put((job, future))
+    self.queue.put((job, future))
     return await future
 
   def stop(self):
