@@ -1,11 +1,10 @@
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 
-
 class TranslationRequest(BaseModel):
-    auth_key:str
     text:str
     target_lang:str
+    show_billed_characters:Optional[bool]=False
 
 
 class Translations(BaseModel):

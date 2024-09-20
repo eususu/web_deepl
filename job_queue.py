@@ -35,9 +35,10 @@ class JobQueue(object):
 
     while True:
       job=None
-      future=None
+      future:asyncio.Future=None
       try:
         job, future = self.queue.get()
+        print(future)
       except queue.Empty:
         continue
       finally:
