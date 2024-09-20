@@ -34,12 +34,12 @@ app = FastAPI(lifespan=lifespan)
 
 @app.post("/v2/translate")
 async def v2_translate(request:TranslationRequest)->TranslationResponse:
-    async def job(request:TranslationRequest):  # 파라미터 추가
+    async def job(request:TranslationRequest):
         logging.info(f"running job with param: {request}")
         return request
-        #return JSONResponse(content={"message": f"Job completed {param} successfully"})
 
     try:
+        
         job_queue.check()
         logging.info("add job")
         response:TranslationResponse = await job_queue.add_job(lambda: job(request))  # 파라미터 전달
@@ -48,7 +48,7 @@ async def v2_translate(request:TranslationRequest)->TranslationResponse:
         logging.error("timeout")
         return JSONResponse(
             status_code=503,
-            content={"message": "서버가繁합니다. 나중에 다시 시도해주세요."}
+            content={"message": "서버가 불안정합니다. 나중에 다시 시도해주세요."}
         )
     except queue.Full:
         logging.error("queue is full")

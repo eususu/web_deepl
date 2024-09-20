@@ -65,7 +65,6 @@ class JobQueue(object):
 
   async def add_job(self, job):
     future = asyncio.Future()
-    print(self.queue)
     self.queue.put((job, future))
     return await future
 
